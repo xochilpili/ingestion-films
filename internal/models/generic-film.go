@@ -1,18 +1,10 @@
 package models
 
-type FestivalFilm struct {
-	Id            string
-	Title         string
-	OriginalTitle string
-	Year          int
-	ImageUrl      string
-	Festival      string
-}
-
-type PopularFilm struct {
+type Film struct {
 	Id          string
 	Title       string
 	Description string
 	ImageUrl    string
+	Year        int
 	Genre       []string
 }

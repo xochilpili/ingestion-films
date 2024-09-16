@@ -12,8 +12,8 @@ func main() {
 
 	logger := logger.New()
 
-	imdbProvider := providers.NewImdb(config, logger)
+	letterbox := providers.NewLetterBox(config, logger)
 
-	films := imdbProvider.GetFestivals()
-	logger.Info().Msgf("films: %v\n", films)
+	films := letterbox.GetFestivals()
+	logger.Info().Msgf("Films: %v", films)
 }

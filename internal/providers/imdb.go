@@ -16,27 +16,28 @@ import (
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-type ImdbProvider struct {
+type Imdb struct {
 	config *config.Config
 	logger *zerolog.Logger
 	c      *colly.Collector
 }
 
-func NewImdb(config *config.Config, logger *zerolog.Logger) *ImdbProvider {
+func NewImdb(config *config.Config, logger *zerolog.Logger) *Imdb {
 	c := colly.NewCollector(
 		colly.MaxDepth(2),
 		colly.Async(),
+		colly.UserAgent("Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"),
 	)
 
-	return &ImdbProvider{
+	return &Imdb{
 		config: config,
 		logger: logger,
 		c:      c,
 	}
 }
 
-func (provider *ImdbProvider) GetFestivals() []models.FestivalFilm {
-	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.ImdbProvider.DelaySecs) * time.Second})
+func (provider *Imdb) GetFestivals() []models.Film {
+	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.DelaySecs) * time.Second})
 
 	festivals := provider.config.ImdbProvider.Festivals
 	imdbFestivalSelectorRe := `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`
@@ -52,7 +53,7 @@ func (provider *ImdbProvider) GetFestivals() []models.FestivalFilm {
 	*/
 
 	var model ImdbFestivalRootObject
-	var films []models.FestivalFilm
+	var films []models.Film
 
 	provider.logger.Info().Msgf("Festivals: %v\n", festivals)
 
@@ -95,8 +96,8 @@ func (provider *ImdbProvider) GetFestivals() []models.FestivalFilm {
 	return films
 }
 
-func (provider *ImdbProvider) GetPopular() []models.PopularFilm {
-	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.ImdbProvider.DelaySecs) * time.Second})
+func (provider *Imdb) GetPopular() []models.Film {
+	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.DelaySecs) * time.Second})
 
 	imdbPopularUrl := provider.config.ImdbProvider.PopularUrl
 	imdbPopularSelectorRe := provider.config.ImdbProvider.PopularSelectorRe
@@ -139,19 +140,17 @@ func (provider *ImdbProvider) GetPopular() []models.PopularFilm {
 	return provider.translate2PopularModel(&model)
 }
 
-func (provider *ImdbProvider) translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.FestivalFilm {
-	var films []models.FestivalFilm
+func (provider *Imdb) translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
+	var films []models.Film
 	for _, item := range imdbObject.NomineesWidgetModel.EventEditionSummary.Awards {
 		for _, category := range item.Categories {
 			for _, nominations := range category.Nominations {
 				for _, firstNominee := range nominations.PrimaryNominees {
-					films = append(films, models.FestivalFilm{
-						Id:            firstNominee.Const,
-						Title:         firstNominee.Name,
-						OriginalTitle: firstNominee.OriginalName,
-						Year:          imdbObject.NomineesWidgetModel.EventEditionSummary.Year,
-						ImageUrl:      firstNominee.ImageUrl,
-						Festival:      item.Id,
+					films = append(films, models.Film{
+						Id:       firstNominee.Const,
+						Title:    firstNominee.Name,
+						Year:     imdbObject.NomineesWidgetModel.EventEditionSummary.Year,
+						ImageUrl: firstNominee.ImageUrl,
 					})
 				}
 			}
@@ -160,8 +159,8 @@ func (provider *ImdbProvider) translate2FestivalModel(imdbObject *ImdbFestivalRo
 	return films
 }
 
-func (provider *ImdbProvider) translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.PopularFilm {
-	var films []models.PopularFilm
+func (provider *Imdb) translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
+	var films []models.Film
 	for _, film := range imdbObject.ItemListElement {
 		var Id string
 		parsedUrl, err := url.Parse(film.Item.Url)
@@ -170,7 +169,13 @@ func (provider *ImdbProvider) translate2PopularModel(imdbObject *ImdbPopularRoot
 		}
 		Id = path.Base(parsedUrl.Path)
 		genres := strings.Split(film.Item.Genre, ", ")
-		films = append(films, models.PopularFilm{Id: Id, Title: film.Item.Name, Description: film.Item.Description, ImageUrl: film.Item.Image, Genre: genres})
+		films = append(films, models.Film{
+			Id:          Id,
+			Title:       film.Item.Name,
+			Description: film.Item.Description,
+			ImageUrl:    film.Item.Image,
+			Genre:       genres,
+		})
 	}
 	return films
 }
