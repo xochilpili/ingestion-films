@@ -8,3 +8,8 @@ type Film struct {
 	Year        int
 	Genre       []string
 }
+
+type FestivalItem struct {
+	Title string
+	Year  int
+}

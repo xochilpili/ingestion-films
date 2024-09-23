@@ -17,8 +17,15 @@ import (
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, c *colly.Collector, _ *resty.Client) []models.Film {
-	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
+func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+	c := colly.NewCollector(
+		colly.MaxDepth(2),
+		colly.Async(true),
+		colly.CacheDir("./cache"),
+		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+	)
+
+	c.Limit(&colly.LimitRule{DomainGlob: "", Parallelism: 2, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
 	festivals := config.ImdbProvider.Festivals
 	imdbFestivalSelectorRe := `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`
@@ -77,7 +84,13 @@ func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, c *colly.Co
 	return films
 }
 
-func imdbGetPopular(config *config.Config, logger *zerolog.Logger, c *colly.Collector, _ *resty.Client) []models.Film {
+func imdbGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+	c := colly.NewCollector(
+		colly.MaxDepth(2),
+		colly.Async(true),
+		colly.CacheDir("./cache"),
+		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+	)
 	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
 	imdbPopularUrl := config.ImdbProvider.PopularUrl

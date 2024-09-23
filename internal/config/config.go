@@ -29,11 +29,19 @@ type LetterboxProvider struct {
 	FestivalsSelectorRe string `default:"h2.title-2 a[href]" split_words:"true"`
 }
 
+type Database struct {
+	Host     string `required:"true"`
+	Name     string `default:"ingestion_films"`
+	User     string `required:"true"`
+	Password string `required:"true"`
+}
+
 type Config struct {
-	HOST              string            `default:"0.0.0.0"`
-	PORT              string            `default:"4000"`
+	HOST              string            `default:"0.0.0.0" required:"true"`
+	PORT              string            `default:"4000" required:"true"`
 	ServiceName       string            `default:"ingestion-films" split_words:"true"`
 	Debug             bool              `default:"false"`
+	Database          Database          `split_words:"true" required:"true"`
 	ImdbProvider      ImdbProvider      `split_words:"true"`
 	YtsProvider       YtsProvider       `split_words:"true"`
 	LetterboxProvider LetterboxProvider `split_words:"true"`

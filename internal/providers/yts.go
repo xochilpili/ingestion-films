@@ -2,13 +2,12 @@ package providers
 
 import (
 	"github.com/go-resty/resty/v2"
-	"github.com/gocolly/colly/v2"
 	"github.com/rs/zerolog"
 	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-func ytsGetPopular(config *config.Config, logger *zerolog.Logger, _ *colly.Collector, r *resty.Client) []models.Film {
+func ytsGetPopular(config *config.Config, logger *zerolog.Logger, r *resty.Client) []models.Film {
 	var result YtsPopularRootObject
 	_, err := r.R().SetResult(&result).SetHeader("Content-Type", "application/json").Get(config.YtsProvider.PopularUrl)
 
