@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-films
+  labels:
+    app: ingestion-films
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestion-films
+  template:
+    metadata:
+      labels:
+        app: ingestion-films
+    spec:
+      containers:
+      - name: ingestion-films
+        image: registry.paranoids.us/ingestion-films:main
+        imagePullPolicy: Always
+        env:
+          - name: IFS_HOST
+            value: 0.0.0.0
+          - name: IFS_PORT
+            value: "4000"
+          - name: IFS_SERVICE_NAME
+            value: ingestion-films
+          - name: IFS_DEBUG
+            value: "False"
+          - name: IFS_DELAY_SECS
+            value: "10"
+          - name: IFS_DATABASE_HOST
+            value:
+          - name: IFS_DATABASE_NAME
+            value: ingestion_films
+          - name: IFS_DATABASE_USER
+            valueFrom:
+              secretKeyRef:
+                name: ingestion-films-db-secret
+                key: username
+          - name: IFS_DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: ingestion-films-db-secret
+                key: password
+          - name: IFS_IMDB_PROVIDER_ENABLED
+            value: "False"
+          - name: IFS_IMDB_PROVIDER_FESTIVALS_HTTP_PREFIX
+            value: https://
+          - name: IFS_IMDB_PROVIDER_FESTIVALS
+            value: cannes:www.imdb.com/event/ev0000147/,tiff:www.imdb.com/event/ev0000659/,venecia:www.imdb.com/event/ev0000681/,oscar:www.imdb.com/event/ev0000003/,berlinale:www.imdb.com/event/ev0000091/
+          - name: IFS_IMDB_PROVIDER_FESTIVALS_POPULAR_URL
+            value:
+          - name: IFS_IMDB_PROVIDER_FESTIVALS_POPULAR_SELECTOR_RE
+            value:
+          - name: IFS_YTS_PROVIDER_ENABLED
+            value: "False"
+          - name: IFS_YTS_PROVIDER_POPULAR_URL
+            value: https://yts.mx/api/v2/list_movies.json
+          - name: IFS_YTS_PROVIDER_POPULAR_FILTERS
+            value: limit:1,page:1,quality:720p,genres:action
+          - name: IFS_LETTERBOX_PROVIDER_ENABLED
+            value: "False"
+          - name: IFS_LETTERBOX_POPULAR_URL
+            value: https://letterboxd.com/films/ajax/popular/this/week/year/
+          - name: IFS_LETTERBOX_POPULAR_SELECTOR_RE
+            value: li.listitem
+          - name: IFS_LETTERBOX_FESTIVALS_URL
+            value: https://letterboxd.com/festiville/lists/
+          - name: IFS_LETTERBOX_FESTIVALS_SELECTOR_RE
+            value: h2.title-2 a[href]
+
+        ports:
+        - containerPort: 4000
+      imagePullSecrets:
+      - name: regcred
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-films-svc
+spec:
+  selector:
+    app: ingestion-films
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 4000

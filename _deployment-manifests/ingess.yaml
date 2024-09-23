@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingestion-films-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.paranoids.us
+    secretName: paranoids-tls
+  rules:
+  - host: api.paranoids.us
+    http:
+      paths:
+      - pathType: Prefix
+        path: /ingestion-films
+        backend:
+          service:
+            name: ingestion-films-svc
+            port:
+              number: 80
