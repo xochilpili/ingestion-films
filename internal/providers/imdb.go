@@ -10,36 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/gocolly/colly/v2"
 	"github.com/rs/zerolog"
 	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-type Imdb struct {
-	config *config.Config
-	logger *zerolog.Logger
-	c      *colly.Collector
-}
+func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, c *colly.Collector, _ *resty.Client) []models.Film {
+	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
-func NewImdb(config *config.Config, logger *zerolog.Logger) *Imdb {
-	c := colly.NewCollector(
-		colly.MaxDepth(2),
-		colly.Async(),
-		colly.UserAgent("Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"),
-	)
-
-	return &Imdb{
-		config: config,
-		logger: logger,
-		c:      c,
-	}
-}
-
-func (provider *Imdb) GetFestivals() []models.Film {
-	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.DelaySecs) * time.Second})
-
-	festivals := provider.config.ImdbProvider.Festivals
+	festivals := config.ImdbProvider.Festivals
 	imdbFestivalSelectorRe := `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`
 
 	/*
@@ -55,18 +36,18 @@ func (provider *Imdb) GetFestivals() []models.Film {
 	var model ImdbFestivalRootObject
 	var films []models.Film
 
-	provider.logger.Info().Msgf("Festivals: %v\n", festivals)
+	logger.Info().Msgf("Festivals: %v\n", festivals)
 
 	for k, url := range festivals {
 
-		provider.c.OnHTML("script", func(h *colly.HTMLElement) {
+		c.OnHTML("script", func(h *colly.HTMLElement) {
 			scriptContent := h.Text
 			re := regexp.MustCompile(imdbFestivalSelectorRe)
 			matches := re.FindStringSubmatch(scriptContent)
 
-			if provider.config.Debug {
+			if config.Debug {
 				fmt.Printf("ScriptContent: %s, matchesLen: %d, matches: %v", scriptContent, len(matches), matches)
-				provider.logger.Info().Msgf("ScriptContent: %s, matchesLen: %d, matches: %v", scriptContent, len(matches), matches)
+				logger.Info().Msgf("ScriptContent: %s, matchesLen: %d, matches: %v", scriptContent, len(matches), matches)
 			}
 
 			if len(matches) > 1 {
@@ -77,41 +58,41 @@ func (provider *Imdb) GetFestivals() []models.Film {
 				if err != nil {
 					log.Fatalf("error while unmarshal %v\n", err)
 				}
-				films = append(films, provider.translate2FestivalModel(&model)...)
+				films = append(films, translate2FestivalModel(&model)...)
 			}
 		})
 
-		if provider.config.Debug {
-			provider.c.OnRequest(func(r *colly.Request) {
+		if config.Debug {
+			c.OnRequest(func(r *colly.Request) {
 				fmt.Printf("Requesting festival: %s, %s\n", k, r.URL.String())
 			})
 		}
 
-		provider.logger.Info().Msgf("Visiting Festival: %s, url: %s", k, provider.config.ImdbProvider.HttpPrefix+url)
+		logger.Info().Msgf("Visiting Festival: %s, url: %s", k, config.ImdbProvider.HttpPrefix+url)
 
-		provider.c.Visit(provider.config.ImdbProvider.HttpPrefix + url)
-		provider.c.Wait()
+		c.Visit(config.ImdbProvider.HttpPrefix + url)
+		c.Wait()
 	}
 
 	return films
 }
 
-func (provider *Imdb) GetPopular() []models.Film {
-	provider.c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(provider.config.DelaySecs) * time.Second})
+func imdbGetPopular(config *config.Config, logger *zerolog.Logger, c *colly.Collector, _ *resty.Client) []models.Film {
+	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
-	imdbPopularUrl := provider.config.ImdbProvider.PopularUrl
-	imdbPopularSelectorRe := provider.config.ImdbProvider.PopularSelectorRe
+	imdbPopularUrl := config.ImdbProvider.PopularUrl
+	imdbPopularSelectorRe := config.ImdbProvider.PopularSelectorRe
 
 	var model ImdbPopularRootObject
 
-	provider.c.OnHTML("script", func(h *colly.HTMLElement) {
+	c.OnHTML("script", func(h *colly.HTMLElement) {
 		scriptContent := h.Text
 
 		re := regexp.MustCompile(imdbPopularSelectorRe)
 		matches := re.FindStringSubmatch(scriptContent)
 
-		if provider.config.Debug {
-			provider.logger.Info().Msgf("Captured content: %s, matchesLength: %d, matches: %v", scriptContent, len(matches), matches)
+		if config.Debug {
+			logger.Info().Msgf("Captured content: %s, matchesLength: %d, matches: %v", scriptContent, len(matches), matches)
 		}
 
 		if len(matches) >= 1 {
@@ -125,22 +106,22 @@ func (provider *Imdb) GetPopular() []models.Film {
 		}
 	})
 
-	if provider.config.Debug {
-		provider.c.OnRequest(func(r *colly.Request) {
-			provider.logger.Info().Msgf("Visiting Popular: %s", r.URL.String())
+	if config.Debug {
+		c.OnRequest(func(r *colly.Request) {
+			logger.Info().Msgf("Visiting Popular: %s", r.URL.String())
 		})
 	}
 
-	if provider.config.Debug {
-		provider.logger.Info().Msgf("Visiting: %s", imdbPopularUrl)
+	if config.Debug {
+		logger.Info().Msgf("Visiting: %s", imdbPopularUrl)
 	}
 
-	provider.c.Visit(imdbPopularUrl)
-	provider.c.Wait()
-	return provider.translate2PopularModel(&model)
+	c.Visit(imdbPopularUrl)
+	c.Wait()
+	return translate2PopularModel(&model)
 }
 
-func (provider *Imdb) translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
+func translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
 	var films []models.Film
 	for _, item := range imdbObject.NomineesWidgetModel.EventEditionSummary.Awards {
 		for _, category := range item.Categories {
@@ -159,7 +140,7 @@ func (provider *Imdb) translate2FestivalModel(imdbObject *ImdbFestivalRootObject
 	return films
 }
 
-func (provider *Imdb) translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
+func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
 	var films []models.Film
 	for _, film := range imdbObject.ItemListElement {
 		var Id string

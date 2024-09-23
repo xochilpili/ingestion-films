@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/logger"
 	"github.com/xochilpili/ingestion-films/internal/providers"
@@ -12,8 +14,10 @@ func main() {
 
 	logger := logger.New()
 
-	letterbox := providers.NewLetterBox(config, logger)
+	manager := providers.New(config, logger)
 
-	films := letterbox.GetFestivals()
-	logger.Info().Msgf("Films: %v", films)
+	items := manager.GetFestivals("imdb")
+	for _, item := range items {
+		fmt.Printf("Title: %s\n", item.Title)
+	}
 }

@@ -2,38 +2,24 @@ package providers
 
 import (
 	"github.com/go-resty/resty/v2"
+	"github.com/gocolly/colly/v2"
 	"github.com/rs/zerolog"
 	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-type YTS struct {
-	config  *config.Config
-	logger  *zerolog.Logger
-	rClient *resty.Client
-}
-
-func NewYts(config *config.Config, logger *zerolog.Logger) *YTS {
-	r := resty.New()
-	return &YTS{
-		config:  config,
-		logger:  logger,
-		rClient: r,
-	}
-}
-
-func (provider *YTS) GetPopular() []models.Film {
+func ytsGetPopular(config *config.Config, logger *zerolog.Logger, _ *colly.Collector, r *resty.Client) []models.Film {
 	var result YtsPopularRootObject
-	_, err := provider.rClient.R().SetResult(&result).SetHeader("Content-Type", "application/json").SetQueryParams(provider.config.YtsProvider.PopularFilters).Get(provider.config.YtsProvider.PopularUrl)
+	_, err := r.R().SetResult(&result).SetHeader("Content-Type", "application/json").Get(config.YtsProvider.PopularUrl)
 
 	if err != nil {
-		provider.logger.Fatal().Msgf("Error while retrieving YTS Popular films: %v", err)
+		logger.Fatal().Msgf("Error while retrieving YTS Popular films: %v", err)
 	}
 
-	return provider.translate2Model(result)
+	return translate2Model(result)
 }
 
-func (provider *YTS) translate2Model(ytsObject YtsPopularRootObject) []models.Film {
+func translate2Model(ytsObject YtsPopularRootObject) []models.Film {
 	var films []models.Film
 	for _, item := range ytsObject.Data.Movies {
 		films = append(films, models.Film{

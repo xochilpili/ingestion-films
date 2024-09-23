@@ -18,7 +18,7 @@ type ImdbProvider struct {
 type YtsProvider struct {
 	Enabled        bool              `default:"False"`
 	PopularUrl     string            `default:"https://yts.mx/api/v2/list_movies.json" split_words:"true"`
-	PopularFilters map[string]string `default:"limit:10,page:1,genre:action,with_rt_ratings:true" split_words:"true"`
+	PopularFilters map[string]string `default:"limit:10,page:1" split_words:"true"`
 }
 
 type LetterboxProvider struct {
