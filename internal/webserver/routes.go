@@ -14,6 +14,8 @@ func (w *WebServer) loadRoutes() {
 	popular := w.ginger.Group("/popular")
 	{
 		popular.GET("/:provider", w.GetPopularByProvider)
+		popular.GET("/:provider/sync", w.SyncPopular)
 		popular.GET("/all", w.GetAllPopular)
+		popular.GET("/all/sync", w.SyncPopular)
 	}
 }

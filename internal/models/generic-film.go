@@ -9,7 +9,7 @@ type Film struct {
 	Genre       []string
 }
 
-type FestivalItem struct {
+type FilmItem struct {
 	Title string
 	Year  int
 }

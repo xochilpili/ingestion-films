@@ -34,3 +34,18 @@ func (w *WebServer) GetAllPopular(c *gin.Context) {
 	w.logger.Info().Msgf("resolved %d popular films", len(films))
 	c.JSON(http.StatusOK, &gin.H{"message": "ok", "total": len(films), "films": films})
 }
+
+func (w *WebServer) SyncPopular(c *gin.Context) {
+	provider := c.Param("provider")
+
+	w.logger.Info().Msg("request syncing popular")
+	go func() {
+		err := w.manager.SyncPopular(provider)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, &gin.H{"message": "error", "error": err.Error()})
+			return
+		}
+	}()
+
+	c.JSON(http.StatusOK, &gin.H{"message": "ok"})
+}

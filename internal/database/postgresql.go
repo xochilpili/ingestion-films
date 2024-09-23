@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
@@ -46,36 +47,40 @@ func (p *Postgres) Close() error {
 	return nil
 }
 
-func (p *Postgres) InsertFestivalFilm(film *models.FestivalItem) error {
-	//defer p.db.Close()
-	if p.db == nil {
-		p.logger.Fatal().Msg("database not present!")
-	}
+func (p *Postgres) InsertFilm(table string, columns []string, item *models.FilmItem) error {
 
-	if ok, err := p.FilmExists(film.Title); ok || err != nil {
+	if ok, err := p.FilmExists(table, item.Title); ok || err != nil {
 		if err != nil {
-			p.logger.Err(err).Msgf("error while validating film %s", film.Title)
+			p.logger.Err(err).Msgf("error while validating film %s", item.Title)
 			return err
 		}
 		return nil
 	}
 
-	sqlStmt := `insert into films_festivals (title,year) values($1, $2)`
-	_, err := p.db.Exec(sqlStmt, film.Title, film.Year)
+	cols := strings.Join(columns, ",")
+	sqlStmt := fmt.Sprintf(`insert into %s (%s) values(%s)`, table, cols, p.computeValues(2))
+	_, err := p.db.Exec(sqlStmt, item.Title, item.Year)
 	if err != nil {
-		p.logger.Err(err).Msgf("error while inserting film %s", film.Title)
+		p.logger.Err(err).Msgf("error while inserting item: %s", item.Title)
 		return err
 	}
-
 	return nil
 }
 
-func (p *Postgres) FilmExists(title string) (bool, error) {
+func (p *Postgres) computeValues(n int) string {
+	nums := make([]string, n)
+	for i := 0; i < n; i++ {
+		nums[i] = fmt.Sprintf("$%d", i+1)
+	}
+	return strings.Join(nums, ",")
+}
+
+func (p *Postgres) FilmExists(table string, title string) (bool, error) {
 	if p.db == nil {
 		p.logger.Fatal().Msg("database not present!")
 	}
 	var count int
-	sqlStmt := `select count(1) from films_festivals where title = $1`
+	sqlStmt := fmt.Sprintf(`select count(1) from %s where title = $1`, table)
 	err := p.db.QueryRow(sqlStmt, title).Scan(&count)
 	if err != nil {
 		return false, err

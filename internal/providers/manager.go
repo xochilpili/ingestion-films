@@ -13,7 +13,7 @@ import (
 
 type PgService interface {
 	Connect() error
-	InsertFestivalFilm(film *models.FestivalItem) error
+	InsertFilm(table string, columns []string, item *models.FilmItem) error
 	Ping() error
 	Close() error
 }
@@ -36,12 +36,6 @@ type Manager struct {
 }
 
 func New(config *config.Config, logger *zerolog.Logger) *Manager {
-	/* c := colly.NewCollector(
-		colly.MaxDepth(2),
-		colly.Async(true),
-		colly.CacheDir("./cache"),
-		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
-	) */
 
 	r := resty.New()
 
@@ -110,9 +104,34 @@ func (m *Manager) SyncFestivals(provider string) error {
 
 	films := m.getFestivals(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFestivalFilm(&models.FestivalItem{Title: item.Title, Year: item.Year})
+		err := m.pgService.InsertFilm("films_festivals", []string{"title", "year"}, &models.FilmItem{Title: item.Title, Year: item.Year})
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
+			return err
+		}
+	}
+	m.logger.Info().Msgf("sync completed with %d items", len(films))
+	return nil
+}
+
+func (m *Manager) SyncPopular(provider string) error {
+	err := m.pgService.Connect()
+	if err != nil {
+		m.logger.Fatal().Err(err).Msg("error while connecting to db")
+		return err
+	}
+	err = m.pgService.Ping()
+	if err != nil {
+		m.logger.Fatal().Err(err).Msg("database didn't pong")
+		return err
+	}
+	defer m.pgService.Close()
+
+	films := m.GetPopular(provider)
+	for _, item := range films {
+		err := m.pgService.InsertFilm("films_popular", []string{"title", "year"}, &models.FilmItem{Title: item.Title, Year: item.Year})
+		if err != nil {
+			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
 			return err
 		}
 	}
@@ -165,6 +184,7 @@ func (m *Manager) getPopular(provider string) []models.Film {
 		go func(wg *sync.WaitGroup, filmsChan chan<- []models.Film, provider string) {
 			defer wg.Done()
 			items := m.handlers[provider].GetPopular(m.config, m.logger, m.r)
+			m.logger.Info().Msgf("received %d populae films from %s provider", len(items), provider)
 			filmsChan <- items
 		}(wg, filmsChan, p)
 
