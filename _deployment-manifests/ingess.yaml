@@ -4,6 +4,8 @@ metadata:
   name: ingestion-films-ingress
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   tls:
@@ -15,7 +17,7 @@ spec:
     http:
       paths:
       - pathType: Prefix
-        path: /ingestion-films
+        path: /ingestion-films(/|$)(.*)
         backend:
           service:
             name: ingestion-films-svc
