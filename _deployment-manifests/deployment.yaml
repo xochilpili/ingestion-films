@@ -31,7 +31,7 @@ spec:
           - name: IFS_DELAY_SECS
             value: "10"
           - name: IFS_DATABASE_HOST
-            value:
+            value: pgsql-svc.databases.svc
           - name: IFS_DATABASE_NAME
             value: ingestion_films
           - name: IFS_DATABASE_USER
