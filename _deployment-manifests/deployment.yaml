@@ -73,7 +73,6 @@ spec:
 
         ports:
         - containerPort: 4000
-      imagePullPolicy: Always
       imagePullSecrets:
       - name: regcred
 ---
