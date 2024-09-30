@@ -104,7 +104,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 
 	films := m.getFestivals(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFilm("films_festivals", []string{"title", "year"}, &models.FilmItem{Title: item.Title, Year: item.Year})
+		err := m.pgService.InsertFilm("films_festivals", []string{"title", "year"}, &models.FilmItem{Provider: provider, Title: item.Title, Year: item.Year})
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
 			return err
@@ -129,7 +129,7 @@ func (m *Manager) SyncPopular(provider string) error {
 
 	films := m.GetPopular(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFilm("films_popular", []string{"title", "year"}, &models.FilmItem{Title: item.Title, Year: item.Year})
+		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year"}, &models.FilmItem{Provider: provider, Title: item.Title, Year: item.Year})
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
 			return err

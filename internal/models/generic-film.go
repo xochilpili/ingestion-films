@@ -10,6 +10,7 @@ type Film struct {
 }
 
 type FilmItem struct {
-	Title string
-	Year  int
+	Provider string
+	Title    string
+	Year     int
 }
