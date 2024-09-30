@@ -58,8 +58,8 @@ func (p *Postgres) InsertFilm(table string, columns []string, item *models.FilmI
 	}
 
 	cols := strings.Join(columns, ",")
-	sqlStmt := fmt.Sprintf(`insert into %s (%s) values(%s)`, table, cols, p.computeValues(2))
-	_, err := p.db.Exec(sqlStmt, item.Title, item.Year)
+	sqlStmt := fmt.Sprintf(`insert into %s (%s) values(%s)`, table, cols, p.computeValues(len(columns)))
+	_, err := p.db.Exec(sqlStmt, item.Provider, item.Title, item.Year)
 	if err != nil {
 		p.logger.Err(err).Msgf("error while inserting item: %s", item.Title)
 		return err
