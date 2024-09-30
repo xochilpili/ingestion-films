@@ -22,7 +22,7 @@ func translate2Model(ytsObject YtsPopularRootObject) []models.Film {
 	var films []models.Film
 	for _, item := range ytsObject.Data.Movies {
 		films = append(films, models.Film{
-			Provider:    "ys",
+			Provider:    "yts",
 			Id:          item.ImdbCode,
 			Title:       item.TitleEnglish,
 			Description: item.Summary,
