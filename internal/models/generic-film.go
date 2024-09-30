@@ -1,6 +1,7 @@
 package models
 
 type Film struct {
+	Provider    string
 	Id          string
 	Title       string
 	Description string

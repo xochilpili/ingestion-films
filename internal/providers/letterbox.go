@@ -51,6 +51,7 @@ func letterboxGetFestivals(config *config.Config, logger *zerolog.Logger, _ *res
 		}
 
 		items = append(items, models.Film{
+			Provider: "letterbox",
 			Id:       id,
 			Title:    title,
 			ImageUrl: imageUrl,
@@ -93,6 +94,7 @@ func letterboxGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty
 		title := h.ChildAttr("img", "alt")
 		imageUrl := fmt.Sprintf("https://a.ltrbxd.com/resized/film-poster/%s/%s-%s-0-140-0-210-crop.jpg", idUrlPath, id, slug)
 		films = append(films, models.Film{
+			Provider: "letterbox",
 			Id:       id,
 			Title:    title,
 			Year:     time.Now().Year(),

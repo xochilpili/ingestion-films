@@ -141,6 +141,7 @@ func translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
 			for _, nominations := range category.Nominations {
 				for _, firstNominee := range nominations.PrimaryNominees {
 					films = append(films, models.Film{
+						Provider: "imdb",
 						Id:       firstNominee.Const,
 						Title:    firstNominee.Name,
 						Year:     imdbObject.NomineesWidgetModel.EventEditionSummary.Year,
@@ -164,6 +165,7 @@ func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
 		Id = path.Base(parsedUrl.Path)
 		genres := strings.Split(film.Item.Genre, ", ")
 		films = append(films, models.Film{
+			Provider:    "imdb",
 			Id:          Id,
 			Title:       film.Item.Name,
 			Description: film.Item.Description,
