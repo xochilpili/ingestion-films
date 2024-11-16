@@ -92,6 +92,7 @@ type ImdbPopularItem struct {
 	ContentRaiting  string                 `json:"contentRaiting"`
 	Genre           string                 `json:"genre"`
 	Duration        string                 `json:"duration"`
+	Year            string                 `json:"year,omitempty"`
 }
 
 type ImdbPopularItemRaiting struct {

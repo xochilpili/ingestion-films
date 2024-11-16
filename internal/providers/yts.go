@@ -3,13 +3,19 @@ package providers
 import (
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog"
-	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-func ytsGetPopular(config *config.Config, logger *zerolog.Logger, r *resty.Client) []models.Film {
+func ytsGetPopular(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film {
 	var result YtsPopularRootObject
-	_, err := r.R().SetResult(&result).SetHeader("Content-Type", "application/json").Get(config.YtsProvider.PopularUrl)
+	_, err := r.R().
+		SetResult(&result).
+		SetHeaders(map[string]string{
+			"Content-Type": "application/json",
+			"User-Agent":   config.UserAgent,
+		}).
+		SetDebug(config.Debug).
+		Get(config.PopularUrl)
 
 	if err != nil {
 		logger.Fatal().Msgf("Error while retrieving YTS Popular films: %v", err)
@@ -28,6 +34,7 @@ func translate2Model(ytsObject YtsPopularRootObject) []models.Film {
 			Description: item.Summary,
 			ImageUrl:    item.BackgroundImageOriginal,
 			Genre:       item.Genres,
+			Year:        item.Year,
 		})
 	}
 	return films

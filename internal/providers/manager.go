@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -9,30 +10,55 @@ import (
 	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/database"
 	"github.com/xochilpili/ingestion-films/internal/models"
+	"github.com/xochilpili/ingestion-films/internal/services"
 )
 
 type PgService interface {
 	Connect() error
-	InsertFilm(table string, columns []string, item *models.FilmItem) error
+	InsertFilm(table string, columns []string, item *models.Film) error
+	GetGenres(genreIds []int) ([]string, error)
 	Ping() error
 	Close() error
 }
 
-type GetFestivals func(config *config.Config, logger *zerolog.Logger, r *resty.Client) []models.Film
-type GetPopular func(config *config.Config, logger *zerolog.Logger, r *resty.Client) []models.Film
+type TmdbService interface {
+	GetMovieDetails(ctx context.Context, title string) ([]models.TmdbItem, error)
+	GenresLookup(ids []int) ([]string, error)
+}
+
+type ProviderConfig struct {
+	Enabled              bool
+	BaseUrl              string
+	PopularUrl           string
+	PopularSelectorRe    string
+	Festivals            map[string]string
+	FestivalsUrl         string
+	FestivalsSelectoreRe string
+	Debug                bool
+	UserAgent            string
+	DelaySecs            int
+	RequireTmdb          bool
+	TmdbUrl              string
+	TmdbApiKey           string
+}
+
+type GetFestivals func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
+type GetPopular func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
+type PostProcess func(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error)
 type Handler = struct {
-	Enabled      bool
+	Config       *ProviderConfig
 	GetFestivals GetFestivals
 	GetPopular   GetPopular
+	PostProcess PostProcess
 }
 
 type Manager struct {
-	config *config.Config
-	logger *zerolog.Logger
-	// c         *colly.Collector
-	r         *resty.Client
-	handlers  map[string]Handler
-	pgService PgService
+	config      *config.Config
+	logger      *zerolog.Logger
+	r           *resty.Client
+	handlers    map[string]Handler
+	pgService   PgService
+	tmdbService TmdbService
 }
 
 func New(config *config.Config, logger *zerolog.Logger) *Manager {
@@ -41,31 +67,83 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 
 	handlers := map[string]Handler{
 		"yts": {
-			Enabled:      config.YtsProvider.Enabled,
+			Config: &ProviderConfig{
+				Enabled:              true,
+				BaseUrl:              "",
+				PopularUrl:           "https://yts.mx/api/v2/list_movies.json",
+				PopularSelectorRe:    "",
+				Festivals:            map[string]string{},
+				FestivalsUrl:         "",
+				FestivalsSelectoreRe: "",
+				Debug:                false,
+				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+				DelaySecs:            10,
+				RequireTmdb:          false,
+				TmdbUrl:              "",
+				TmdbApiKey:           "",
+			},
 			GetFestivals: nil,
 			GetPopular:   ytsGetPopular,
+			PostProcess: nil,
 		},
 		"letterbox": {
-			Enabled:      config.LetterboxProvider.Enabled,
+			Config: &ProviderConfig{
+				Enabled:              true,
+				BaseUrl:              "https://letterboxd.com",
+				PopularUrl:           "https://letterboxd.com/films/ajax/popular/this/week/year/",
+				PopularSelectorRe:    "li.listitem",
+				Festivals:            map[string]string{},
+				FestivalsUrl:         "https://letterboxd.com/festiville/lists/",
+				FestivalsSelectoreRe: "h2.title-2 a[href]",
+				Debug:                false,
+				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+				DelaySecs:            10,
+				RequireTmdb:          true,
+				TmdbUrl:              config.Tmdb.Url,
+				TmdbApiKey:           config.Tmdb.ApiKey,
+			},
 			GetFestivals: letterboxGetFestivals,
 			GetPopular:   letterboxGetPopular,
+			PostProcess: letterboxPostProcess,
 		},
 		"imdb": {
-			Enabled:      config.ImdbProvider.Enabled,
+			Config: &ProviderConfig{
+				Enabled:           true,
+				BaseUrl:           "",
+				PopularUrl:        "https://www.imdb.com/chart/moviemeter/?ref_=nv_mv_mpm",
+				PopularSelectorRe: "itemListElement",
+				Festivals: map[string]string{
+					"cannes":    "https://www.imdb.com/event/ev0000147/",
+					"tiff":      "https://www.imdb.com/event/ev0000659/",
+					"venecia":   "https://www.imdb.com/event/ev0000681/",
+					"oscar":     "https://www.imdb.com/event/ev0000003/",
+					"berlinale": "https://www.imdb.com/event/ev0000091/",
+				},
+				FestivalsUrl:         "",
+				FestivalsSelectoreRe: `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`,
+				Debug:                false,
+				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+				DelaySecs:            10,
+				RequireTmdb:          true,
+				TmdbUrl:              "",
+				TmdbApiKey:           "",
+			},
 			GetFestivals: imdbGetFestivals,
 			GetPopular:   imdbGetPopular,
+			PostProcess: imdbPostProcess,
 		},
 	}
 
 	pgService := database.New(config, logger)
-
+	pgService.Connect()
+	tmdbService := services.NewTmDb(config, logger, pgService)
 	return &Manager{
-		config: config,
-		logger: logger,
-		// c:         c,
-		r:         r,
-		handlers:  handlers,
-		pgService: pgService,
+		config:      config,
+		logger:      logger,
+		r:           r,
+		handlers:    handlers,
+		pgService:   pgService,
+		tmdbService: tmdbService,
 	}
 }
 
@@ -104,7 +182,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 
 	films := m.getFestivals(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFilm("films_festivals", []string{"provider", "title", "year"}, &models.FilmItem{Provider: item.Provider, Title: item.Title, Year: item.Year})
+		err := m.pgService.InsertFilm("films_festivals", []string{"provider", "title", "year"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
 			return err
@@ -129,7 +207,7 @@ func (m *Manager) SyncPopular(provider string) error {
 
 	films := m.GetPopular(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year"}, &models.FilmItem{Provider: item.Provider, Title: item.Title, Year: item.Year})
+		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
 			return err
@@ -153,7 +231,10 @@ func (m *Manager) getFestivals(provider string) []models.Film {
 		go func(wg *sync.WaitGroup, filmsChan chan<- []models.Film, provider string) {
 			defer wg.Done()
 			m.logger.Info().Msgf("festivals from provider: %s", provider)
-			items := m.handlers[provider].GetFestivals(m.config, m.logger, m.r)
+			items := m.handlers[provider].GetFestivals(m.handlers[provider].Config, m.logger, m.r)
+			if m.handlers[provider].Config.RequireTmdb {
+				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
+			}
 			filmsChan <- items
 		}(wg, filmsChan, p)
 	}
@@ -183,8 +264,11 @@ func (m *Manager) getPopular(provider string) []models.Film {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, filmsChan chan<- []models.Film, provider string) {
 			defer wg.Done()
-			items := m.handlers[provider].GetPopular(m.config, m.logger, m.r)
+			items := m.handlers[provider].GetPopular(m.handlers[provider].Config, m.logger, m.r)
 			m.logger.Info().Msgf("received %d populae films from %s provider", len(items), provider)
+			if m.handlers[provider].Config.RequireTmdb {
+				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
+			}
 			filmsChan <- items
 		}(wg, filmsChan, p)
 	}

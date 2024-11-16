@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -9,23 +10,22 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/gocolly/colly/v2"
 	"github.com/rs/zerolog"
-	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-func letterboxGetFestivals(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+func letterboxGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Client) []models.Film {
 	c := colly.NewCollector(
 		colly.MaxDepth(2),
 		colly.Async(true),
 		colly.CacheDir("./cache"),
-		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+		colly.UserAgent(config.UserAgent),
 	)
 
 	c.Limit(&colly.LimitRule{DomainGlob: "", Parallelism: 2, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
 	var items []models.Film
 
-	c.OnHTML(config.LetterboxProvider.FestivalsSelectorRe, func(h *colly.HTMLElement) {
+	c.OnHTML(config.FestivalsSelectoreRe, func(h *colly.HTMLElement) {
 		link := h.Attr("href")
 		re := regexp.MustCompile(`festiville/list`)
 
@@ -34,7 +34,7 @@ func letterboxGetFestivals(config *config.Config, logger *zerolog.Logger, _ *res
 				title := h.Text
 				logger.Info().Msgf("Link found: %s, Festival: %s", link, title)
 			}
-			baseUrl := "https://letterboxd.com" + link
+			baseUrl := config.BaseUrl + link
 			h.Request.Visit(baseUrl)
 		}
 	})
@@ -71,23 +71,23 @@ func letterboxGetFestivals(config *config.Config, logger *zerolog.Logger, _ *res
 		})
 	}
 
-	c.Visit(config.LetterboxProvider.FestivalsUrl)
+	c.Visit(config.FestivalsUrl)
 	c.Wait()
 	return items
 }
 
-func letterboxGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+func letterboxGetPopular(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Client) []models.Film {
 	c := colly.NewCollector(
 		colly.MaxDepth(2),
 		colly.Async(true),
 		colly.CacheDir("./cache"),
-		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+		colly.UserAgent(config.UserAgent),
 	)
 
 	c.Limit(&colly.LimitRule{DomainGlob: "", Parallelism: 2, RandomDelay: 10 * time.Second})
 
 	var films []models.Film
-	c.OnHTML(config.LetterboxProvider.PopularSelectorRe, func(h *colly.HTMLElement) {
+	c.OnHTML(config.PopularSelectorRe, func(h *colly.HTMLElement) {
 		id := h.ChildAttr("div.really-lazy-load", "data-film-id")
 		slug := h.ChildAttr("div.really-lazy-load", "data-film-slug")
 		idUrlPath := strings.Join(strings.Split(id, ""), "/")
@@ -104,7 +104,8 @@ func letterboxGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty
 
 	if config.Debug {
 		c.OnResponse(func(r *colly.Response) {
-			logger.Info().Msgf("Response: %s", string(r.Body))
+			fmt.Println("Response:")
+			fmt.Println(string(r.Body))
 		})
 	}
 
@@ -114,7 +115,34 @@ func letterboxGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty
 		})
 	}
 
-	c.Visit(fmt.Sprintf("%s%d%s", config.LetterboxProvider.PopularUrl, time.Now().Year(), "/?esiAllowFilters=true"))
+	c.Visit(fmt.Sprintf("%s%d%s", config.PopularUrl, time.Now().Year(), "/?esiAllowFilters=true"))
 	c.Wait()
 	return films
+}
+
+func letterboxPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error) {
+	if !config.RequireTmdb {
+		return items, nil
+	}
+	for i := range *items {
+		item := &(*items)[i]
+		filmdetails, err := tmdbService.GetMovieDetails(context.Background(), item.Title)
+		if err != nil {
+			return nil, err
+		}
+		for _, film := range filmdetails {
+			if strings.EqualFold(film.OriginalTitle, item.Title) {
+				if(len(film.GenreIds) == 0){
+					item.Genre = nil
+					continue
+				}
+				genres, err := tmdbService.GenresLookup(film.GenreIds)
+				if err != nil {
+					continue
+				}
+				item.Genre = genres
+			}
+		}
+	}
+	return items, nil
 }

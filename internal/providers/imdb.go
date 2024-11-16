@@ -1,34 +1,35 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/gocolly/colly/v2"
 	"github.com/rs/zerolog"
-	"github.com/xochilpili/ingestion-films/internal/config"
 	"github.com/xochilpili/ingestion-films/internal/models"
 )
 
-func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+func imdbGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Client) []models.Film {
 	c := colly.NewCollector(
 		colly.MaxDepth(2),
 		colly.Async(true),
 		colly.CacheDir("./cache"),
-		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+		colly.UserAgent(config.UserAgent),
 	)
 
 	c.Limit(&colly.LimitRule{DomainGlob: "", Parallelism: 2, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
-	festivals := config.ImdbProvider.Festivals
-	imdbFestivalSelectorRe := `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`
+	festivals := config.Festivals
+	imdbFestivalSelectorRe := config.FestivalsSelectoreRe
 
 	/*
 		festivals := map[string]string{
@@ -75,26 +76,26 @@ func imdbGetFestivals(config *config.Config, logger *zerolog.Logger, _ *resty.Cl
 			})
 		}
 
-		logger.Info().Msgf("Visiting Festival: %s, url: %s", k, config.ImdbProvider.HttpPrefix+url)
+		logger.Info().Msgf("Visiting Festival: %s, url: %s", k, url)
 
-		c.Visit(config.ImdbProvider.HttpPrefix + url)
+		c.Visit(url)
 		c.Wait()
 	}
 
 	return films
 }
 
-func imdbGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty.Client) []models.Film {
+func imdbGetPopular(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Client) []models.Film {
 	c := colly.NewCollector(
 		colly.MaxDepth(2),
 		colly.Async(true),
 		colly.CacheDir("./cache"),
-		colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+		colly.UserAgent(config.UserAgent),
 	)
 	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
-	imdbPopularUrl := config.ImdbProvider.PopularUrl
-	imdbPopularSelectorRe := config.ImdbProvider.PopularSelectorRe
+	imdbPopularUrl := config.PopularUrl
+	imdbPopularSelectorRe := config.PopularSelectorRe
 
 	var model ImdbPopularRootObject
 
@@ -119,6 +120,12 @@ func imdbGetPopular(config *config.Config, logger *zerolog.Logger, _ *resty.Clie
 		}
 	})
 
+	if config.Debug {
+		c.OnResponse(func(r *colly.Response) {
+			fmt.Printf("Response:\n")
+			fmt.Println(string(r.Body))
+		})
+	}
 	if config.Debug {
 		c.OnRequest(func(r *colly.Request) {
 			logger.Info().Msgf("Visiting Popular: %s", r.URL.String())
@@ -171,7 +178,40 @@ func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
 			Description: film.Item.Description,
 			ImageUrl:    film.Item.Image,
 			Genre:       genres,
+			Year:        0,
 		})
 	}
 	return films
+}
+
+
+func imdbPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error) {
+	if !config.RequireTmdb {
+		return items, nil
+	}
+	for i := range *items {
+		item := &(*items)[i]
+		filmdetails, err := tmdbService.GetMovieDetails(context.Background(), item.Title)
+		if err != nil {
+			return nil, err
+		}
+		for _, film := range filmdetails {
+			yearStr := strings.Split(film.ReleaseDate, "-");
+			year, _ := strconv.Atoi(yearStr[0])
+			if strings.EqualFold(film.OriginalLanguage, item.Title) {
+				if(len(film.GenreIds) == 0){
+					item.Genre = nil
+					item.Year = year
+					continue
+				}
+				genres, err := tmdbService.GenresLookup(film.GenreIds)
+				if err != nil {
+					continue
+				}
+				item.Year = year
+				item.Genre = genres
+			}
+		}
+	}
+	return items, nil
 }
