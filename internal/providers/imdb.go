@@ -44,8 +44,6 @@ func imdbGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.C
 	var model ImdbFestivalRootObject
 	var films []models.Film
 
-	logger.Info().Msgf("Festivals: %v\n", festivals)
-
 	for k, url := range festivals {
 
 		c.OnHTML("script", func(h *colly.HTMLElement) {
@@ -59,7 +57,7 @@ func imdbGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.C
 			}
 
 			if len(matches) > 1 {
-				// Extract and print the JavaScript object
+				// Extract the JavaScript object
 				jsObject := matches[1]
 
 				err := json.Unmarshal([]byte(jsObject), &model)
@@ -171,10 +169,12 @@ func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
 		}
 		Id = path.Base(parsedUrl.Path)
 		genres := strings.Split(film.Item.Genre, ", ")
+		title := strings.ReplaceAll(film.Item.Name, "&amp;", "&")
+		title = strings.ReplaceAll(title, "&apos;", "'")
 		films = append(films, models.Film{
 			Provider:    "imdb",
 			Id:          Id,
-			Title:       film.Item.Name,
+			Title:       title,
 			Description: film.Item.Description,
 			ImageUrl:    film.Item.Image,
 			Genre:       genres,
@@ -191,14 +191,17 @@ func imdbPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]m
 	}
 	for i := range *items {
 		item := &(*items)[i]
+		if config.Debug{
+			fmt.Printf("processing item: %s\n", item.Title)
+		}
 		filmdetails, err := tmdbService.GetMovieDetails(context.Background(), item.Title)
 		if err != nil {
 			return nil, err
 		}
 		for _, film := range filmdetails {
-			yearStr := strings.Split(film.ReleaseDate, "-");
-			year, _ := strconv.Atoi(yearStr[0])
-			if strings.EqualFold(film.OriginalLanguage, item.Title) {
+			if strings.EqualFold(film.Title, item.Title) {
+				yearStr := strings.Split(film.ReleaseDate, "-");
+				year, _ := strconv.Atoi(yearStr[0])
 				if(len(film.GenreIds) == 0){
 					item.Genre = nil
 					item.Year = year
@@ -208,6 +211,7 @@ func imdbPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]m
 				if err != nil {
 					continue
 				}
+				
 				item.Year = year
 				item.Genre = genres
 			}

@@ -3,7 +3,9 @@ package providers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/rs/zerolog"
@@ -11,6 +13,7 @@ import (
 	"github.com/xochilpili/ingestion-films/internal/database"
 	"github.com/xochilpili/ingestion-films/internal/models"
 	"github.com/xochilpili/ingestion-films/internal/services"
+	"github.com/xochilpili/ingestion-films/internal/utils"
 )
 
 type PgService interface {
@@ -40,6 +43,7 @@ type ProviderConfig struct {
 	RequireTmdb          bool
 	TmdbUrl              string
 	TmdbApiKey           string
+	ExcludeGenres []string
 }
 
 type GetFestivals func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
@@ -81,6 +85,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				RequireTmdb:          false,
 				TmdbUrl:              "",
 				TmdbApiKey:           "",
+				ExcludeGenres: config.ExcludeGenres,
 			},
 			GetFestivals: nil,
 			GetPopular:   ytsGetPopular,
@@ -101,6 +106,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				RequireTmdb:          true,
 				TmdbUrl:              config.Tmdb.Url,
 				TmdbApiKey:           config.Tmdb.ApiKey,
+				ExcludeGenres: config.ExcludeGenres,
 			},
 			GetFestivals: letterboxGetFestivals,
 			GetPopular:   letterboxGetPopular,
@@ -116,7 +122,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 					"cannes":    "https://www.imdb.com/event/ev0000147/",
 					"tiff":      "https://www.imdb.com/event/ev0000659/",
 					"venecia":   "https://www.imdb.com/event/ev0000681/",
-					"oscar":     "https://www.imdb.com/event/ev0000003/",
+					"oscar":     fmt.Sprintf("https://www.imdb.com/event/ev0000003/%d/", time.Now().Year()),
 					"berlinale": "https://www.imdb.com/event/ev0000091/",
 				},
 				FestivalsUrl:         "",
@@ -125,8 +131,9 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
 				DelaySecs:            10,
 				RequireTmdb:          true,
-				TmdbUrl:              "",
-				TmdbApiKey:           "",
+				TmdbUrl:              config.Tmdb.Url,
+				TmdbApiKey:           config.Tmdb.ApiKey,
+				ExcludeGenres: config.ExcludeGenres,
 			},
 			GetFestivals: imdbGetFestivals,
 			GetPopular:   imdbGetPopular,
@@ -182,7 +189,10 @@ func (m *Manager) SyncFestivals(provider string) error {
 
 	films := m.getFestivals(provider)
 	for _, item := range films {
-		err := m.pgService.InsertFilm("films_festivals", []string{"provider", "title", "year"}, &item)
+		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres){
+			continue
+		}
+		err := m.pgService.InsertFilm("films_festivals", []string{"provider", "title", "year", "genres"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
 			return err
@@ -191,6 +201,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 	m.logger.Info().Msgf("sync completed with %d items", len(films))
 	return nil
 }
+
 
 func (m *Manager) SyncPopular(provider string) error {
 	err := m.pgService.Connect()
@@ -230,9 +241,10 @@ func (m *Manager) getFestivals(provider string) []models.Film {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, filmsChan chan<- []models.Film, provider string) {
 			defer wg.Done()
-			m.logger.Info().Msgf("festivals from provider: %s", provider)
 			items := m.handlers[provider].GetFestivals(m.handlers[provider].Config, m.logger, m.r)
+			m.logger.Info().Msgf("received %d festival films from %s provider", len(items), provider)
 			if m.handlers[provider].Config.RequireTmdb {
+				m.logger.Info().Msgf("festivals post process for provider: %s", provider)
 				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
 			}
 			filmsChan <- items
@@ -265,8 +277,9 @@ func (m *Manager) getPopular(provider string) []models.Film {
 		go func(wg *sync.WaitGroup, filmsChan chan<- []models.Film, provider string) {
 			defer wg.Done()
 			items := m.handlers[provider].GetPopular(m.handlers[provider].Config, m.logger, m.r)
-			m.logger.Info().Msgf("received %d populae films from %s provider", len(items), provider)
+			m.logger.Info().Msgf("received %d popular films from %s provider", len(items), provider)
 			if m.handlers[provider].Config.RequireTmdb {
+				m.logger.Info().Msgf("popular post process for provider: %s", provider)
 				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
 			}
 			filmsChan <- items

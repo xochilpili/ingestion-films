@@ -136,10 +136,12 @@ func letterboxPostProcess(config *ProviderConfig, tmdbService TmdbService, items
 					item.Genre = nil
 					continue
 				}
+				
 				genres, err := tmdbService.GenresLookup(film.GenreIds)
 				if err != nil {
 					continue
 				}
+
 				item.Genre = genres
 			}
 		}

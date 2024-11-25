@@ -26,6 +26,7 @@ type Config struct {
 	Debug       bool     `default:"false"`
 	Database    Database `split_words:"true" required:"true"`
 	Tmdb        Tmdb     `required:"true"`
+	ExcludeGenres []string `split_words:"true"`
 }
 
 var EnvPrefix = "IFS"

@@ -31,12 +31,15 @@ func (w *WebServer) GetAllFestivals(c *gin.Context) {
 
 func (w *WebServer) SyncFestivals(c *gin.Context) {
 	provider := c.Param("provider")
-
-	w.logger.Info().Msg("request syncing festivals")
+	if provider == "yts" {
+		c.JSON(http.StatusBadRequest, &gin.H{"message": "error", "error": "bad request"})
+		return
+	}
+	w.logger.Info().Msgf("request syncing festivals %s", provider)
 	go func() {
 		err := w.manager.SyncFestivals(provider)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, &gin.H{"message": "error", "error": err.Error()})
+			w.logger.Err(err).Msgf("error occurs while syncing festival %s", provider)
 			return
 		}
 	}()
