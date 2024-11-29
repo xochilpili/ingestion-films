@@ -43,7 +43,7 @@ type ProviderConfig struct {
 	RequireTmdb          bool
 	TmdbUrl              string
 	TmdbApiKey           string
-	ExcludeGenres []string
+	ExcludeGenres        []string
 }
 
 type GetFestivals func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
@@ -53,7 +53,7 @@ type Handler = struct {
 	Config       *ProviderConfig
 	GetFestivals GetFestivals
 	GetPopular   GetPopular
-	PostProcess PostProcess
+	PostProcess  PostProcess
 }
 
 type Manager struct {
@@ -85,11 +85,11 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				RequireTmdb:          false,
 				TmdbUrl:              "",
 				TmdbApiKey:           "",
-				ExcludeGenres: config.ExcludeGenres,
+				ExcludeGenres:        config.ExcludeGenres,
 			},
 			GetFestivals: nil,
 			GetPopular:   ytsGetPopular,
-			PostProcess: nil,
+			PostProcess:  nil,
 		},
 		"letterbox": {
 			Config: &ProviderConfig{
@@ -106,11 +106,11 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				RequireTmdb:          true,
 				TmdbUrl:              config.Tmdb.Url,
 				TmdbApiKey:           config.Tmdb.ApiKey,
-				ExcludeGenres: config.ExcludeGenres,
+				ExcludeGenres:        config.ExcludeGenres,
 			},
 			GetFestivals: letterboxGetFestivals,
 			GetPopular:   letterboxGetPopular,
-			PostProcess: letterboxPostProcess,
+			PostProcess:  letterboxPostProcess,
 		},
 		"imdb": {
 			Config: &ProviderConfig{
@@ -133,11 +133,11 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				RequireTmdb:          true,
 				TmdbUrl:              config.Tmdb.Url,
 				TmdbApiKey:           config.Tmdb.ApiKey,
-				ExcludeGenres: config.ExcludeGenres,
+				ExcludeGenres:        config.ExcludeGenres,
 			},
 			GetFestivals: imdbGetFestivals,
 			GetPopular:   imdbGetPopular,
-			PostProcess: imdbPostProcess,
+			PostProcess:  imdbPostProcess,
 		},
 	}
 
@@ -189,7 +189,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 
 	films := m.getFestivals(provider)
 	for _, item := range films {
-		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres){
+		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres) {
 			continue
 		}
 		err := m.pgService.InsertFilm("films_festivals", []string{"provider", "title", "year", "genres"}, &item)
@@ -201,7 +201,6 @@ func (m *Manager) SyncFestivals(provider string) error {
 	m.logger.Info().Msgf("sync completed with %d items", len(films))
 	return nil
 }
-
 
 func (m *Manager) SyncPopular(provider string) error {
 	err := m.pgService.Connect()
@@ -218,6 +217,9 @@ func (m *Manager) SyncPopular(provider string) error {
 
 	films := m.GetPopular(provider)
 	for _, item := range films {
+		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres) {
+			continue
+		}
 		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
