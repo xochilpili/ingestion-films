@@ -34,6 +34,8 @@ spec:
             value: ingestion_films
           - name: IFS_TMDB_URL
             value: https://api.themoviedb.org/
+          - name: IFS_PLEX_API_URL
+            value: http://192.168.105.105:32400/
           - name: IFS_DATABASE_USER
             valueFrom:
               secretKeyRef:
