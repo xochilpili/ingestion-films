@@ -39,3 +39,28 @@ type TmdbResponse struct {
 	TotalPages   int        `json:"total_pages"`
 	TotalResults int        `json:"total_results"`
 }
+
+type PlexMediaItem struct {
+	Title         string `json:"title"`
+	Type          string `json:"type"`
+	HubIdentifier string `json:"hubIdentifier"`
+	Metadata      struct {
+		Key                 string `json:"key"`
+		Type                string `json:"type"`
+		LibrarySectionID    int    `json:"librarySectionID"`
+		LibrarySectionTitle string `json:"librarySectionTitle"`
+		Title               string `json:"title"`
+		OriginalTitle       string `json:"originalTitle"`
+		Year                int    `json:"year"`
+		Location            []struct {
+			Path string `json:"path"`
+		} `json:"Location"`
+	} `json:"Metadata"`
+}
+
+type PlexMediaSearch struct {
+	MediaContainer struct {
+		Size         int             `json:"size,omitempty"`
+		SearchResult []PlexMediaItem `json:"SearchResult"`
+	} `json:"MediaContainer,omitempty"`
+}

@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -24,9 +23,9 @@ type PgService interface {
 	Close() error
 }
 
-type TmdbService interface {
-	GetMovieDetails(ctx context.Context, title string) ([]models.TmdbItem, error)
-	GenresLookup(ids []int) ([]string, error)
+type ApiService interface {
+	GetMovieDetails(title string) ([]models.TmdbItem, error)
+	PlexItemExists(title string) (bool, error)
 }
 
 type ProviderConfig struct {
@@ -48,7 +47,7 @@ type ProviderConfig struct {
 
 type GetFestivals func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
 type GetPopular func(config *ProviderConfig, logger *zerolog.Logger, r *resty.Client) []models.Film
-type PostProcess func(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error)
+type PostProcess func(config *ProviderConfig, dbService PgService, apiService ApiService, items *[]models.Film) (*[]models.Film, error)
 type Handler = struct {
 	Config       *ProviderConfig
 	GetFestivals GetFestivals
@@ -57,12 +56,12 @@ type Handler = struct {
 }
 
 type Manager struct {
-	config      *config.Config
-	logger      *zerolog.Logger
-	r           *resty.Client
-	handlers    map[string]Handler
-	pgService   PgService
-	tmdbService TmdbService
+	config     *config.Config
+	logger     *zerolog.Logger
+	r          *resty.Client
+	handlers   map[string]Handler
+	pgService  PgService
+	apiService ApiService
 }
 
 func New(config *config.Config, logger *zerolog.Logger) *Manager {
@@ -143,14 +142,14 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 
 	pgService := database.New(config, logger)
 	pgService.Connect()
-	tmdbService := services.NewTmDb(config, logger, pgService)
+	apiService := services.NewApi(config, logger)
 	return &Manager{
-		config:      config,
-		logger:      logger,
-		r:           r,
-		handlers:    handlers,
-		pgService:   pgService,
-		tmdbService: tmdbService,
+		config:     config,
+		logger:     logger,
+		r:          r,
+		handlers:   handlers,
+		pgService:  pgService,
+		apiService: apiService,
 	}
 }
 
@@ -216,17 +215,28 @@ func (m *Manager) SyncPopular(provider string) error {
 	defer m.pgService.Close()
 
 	films := m.GetPopular(provider)
+	filtered := 0
 	for _, item := range films {
 		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres) {
 			continue
 		}
-		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
+		ok, err := m.apiService.PlexItemExists(item.Title)
+		if err != nil {
+			continue
+		}
+		if ok {
+			m.logger.Info().Msgf("film %s already exists in plex", item.Title)
+			continue
+		}
+
+		err = m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
 			return err
 		}
+		filtered += filtered
 	}
-	m.logger.Info().Msgf("sync completed with %d items", len(films))
+	m.logger.Info().Msgf("sync completed with %d filtered items from %d", filtered, len(films))
 	return nil
 }
 
@@ -247,7 +257,7 @@ func (m *Manager) getFestivals(provider string) []models.Film {
 			m.logger.Info().Msgf("received %d festival films from %s provider", len(items), provider)
 			if m.handlers[provider].Config.RequireTmdb {
 				m.logger.Info().Msgf("festivals post process for provider: %s", provider)
-				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
+				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.pgService, m.apiService, &items)
 			}
 			filmsChan <- items
 		}(wg, filmsChan, p)
@@ -282,7 +292,7 @@ func (m *Manager) getPopular(provider string) []models.Film {
 			m.logger.Info().Msgf("received %d popular films from %s provider", len(items), provider)
 			if m.handlers[provider].Config.RequireTmdb {
 				m.logger.Info().Msgf("popular post process for provider: %s", provider)
-				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.tmdbService, &items)
+				m.handlers[provider].PostProcess(m.handlers[provider].Config, m.pgService, m.apiService, &items)
 			}
 			filmsChan <- items
 		}(wg, filmsChan, p)

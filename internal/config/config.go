@@ -19,14 +19,19 @@ type Tmdb struct {
 	ApiKey string `required:"true" split_words:"true"`
 }
 
+type Plex struct {
+	ApiUrl string `required:"true" split_words:"true"`
+}
+
 type Config struct {
-	HOST        string   `default:"0.0.0.0" required:"true"`
-	PORT        string   `default:"4000" required:"true"`
-	ServiceName string   `default:"ingestion-films" split_words:"true"`
-	Debug       bool     `default:"false"`
-	Database    Database `split_words:"true" required:"true"`
-	Tmdb        Tmdb     `required:"true"`
+	HOST          string   `default:"0.0.0.0" required:"true"`
+	PORT          string   `default:"4000" required:"true"`
+	ServiceName   string   `default:"ingestion-films" split_words:"true"`
+	Debug         bool     `default:"false"`
+	Database      Database `split_words:"true" required:"true"`
+	Tmdb          Tmdb     `required:"true"`
 	ExcludeGenres []string `split_words:"true"`
+	Plex          Plex     `split_words:"true"`
 }
 
 var EnvPrefix = "IFS"

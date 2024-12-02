@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -120,24 +119,24 @@ func letterboxGetPopular(config *ProviderConfig, logger *zerolog.Logger, _ *rest
 	return films
 }
 
-func letterboxPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error) {
+func letterboxPostProcess(config *ProviderConfig, pgService PgService, apiService ApiService, items *[]models.Film) (*[]models.Film, error) {
 	if !config.RequireTmdb {
 		return items, nil
 	}
 	for i := range *items {
 		item := &(*items)[i]
-		filmdetails, err := tmdbService.GetMovieDetails(context.Background(), item.Title)
+		filmdetails, err := apiService.GetMovieDetails(item.Title)
 		if err != nil {
 			return nil, err
 		}
 		for _, film := range filmdetails {
 			if strings.EqualFold(film.OriginalTitle, item.Title) {
-				if(len(film.GenreIds) == 0){
+				if len(film.GenreIds) == 0 {
 					item.Genre = nil
 					continue
 				}
-				
-				genres, err := tmdbService.GenresLookup(film.GenreIds)
+
+				genres, err := pgService.GetGenres(film.GenreIds)
 				if err != nil {
 					continue
 				}

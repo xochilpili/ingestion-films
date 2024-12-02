@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -184,34 +183,33 @@ func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
 	return films
 }
 
-
-func imdbPostProcess(config *ProviderConfig, tmdbService TmdbService, items *[]models.Film) (*[]models.Film, error) {
+func imdbPostProcess(config *ProviderConfig, pgService PgService, apiService ApiService, items *[]models.Film) (*[]models.Film, error) {
 	if !config.RequireTmdb {
 		return items, nil
 	}
 	for i := range *items {
 		item := &(*items)[i]
-		if config.Debug{
+		if config.Debug {
 			fmt.Printf("processing item: %s\n", item.Title)
 		}
-		filmdetails, err := tmdbService.GetMovieDetails(context.Background(), item.Title)
+		filmdetails, err := apiService.GetMovieDetails(item.Title)
 		if err != nil {
 			return nil, err
 		}
 		for _, film := range filmdetails {
 			if strings.EqualFold(film.Title, item.Title) {
-				yearStr := strings.Split(film.ReleaseDate, "-");
+				yearStr := strings.Split(film.ReleaseDate, "-")
 				year, _ := strconv.Atoi(yearStr[0])
-				if(len(film.GenreIds) == 0){
+				if len(film.GenreIds) == 0 {
 					item.Genre = nil
 					item.Year = year
 					continue
 				}
-				genres, err := tmdbService.GenresLookup(film.GenreIds)
+				genres, err := pgService.GetGenres(film.GenreIds)
 				if err != nil {
 					continue
 				}
-				
+
 				item.Year = year
 				item.Genre = genres
 			}
