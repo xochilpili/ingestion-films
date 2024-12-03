@@ -75,7 +75,7 @@ func (a *ApiService) PlexItemExists(title string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	a.logger.Info().Msgf("plex search results: %d", len(response.MediaContainer.SearchResult))
+
 	for _, item := range response.MediaContainer.SearchResult {
 		if item.Metadata.Title != "" {
 			if strings.EqualFold(item.Metadata.Title, title) {

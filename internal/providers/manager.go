@@ -217,24 +217,22 @@ func (m *Manager) SyncPopular(provider string) error {
 	films := m.GetPopular(provider)
 	filtered := 0
 	for _, item := range films {
-		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres) {
-			continue
-		}
-		ok, err := m.apiService.PlexItemExists(item.Title)
-		if err != nil {
-			continue
-		}
+		ok, _ := m.apiService.PlexItemExists(item.Title)
 		if ok {
-			m.logger.Info().Msgf("film %s already exists in plex", item.Title)
+			m.logger.Warn().Msgf("film %s already exists in plex", item.Title)
 			continue
 		}
 
-		err = m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
+		if utils.ExcludeGenre(item.Genre, m.config.ExcludeGenres) {
+			continue
+		}
+
+		err := m.pgService.InsertFilm("films_popular", []string{"provider", "title", "year", "genres"}, &item)
 		if err != nil {
 			m.logger.Err(err).Msgf("error while inserting film: %s", item.Title)
 			return err
 		}
-		filtered += filtered
+		filtered += 1
 	}
 	m.logger.Info().Msgf("sync completed with %d filtered items from %d", filtered, len(films))
 	return nil
