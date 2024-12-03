@@ -14,6 +14,9 @@ func ytsGetPopular(config *ProviderConfig, logger *zerolog.Logger, r *resty.Clie
 			"Content-Type": "application/json",
 			"User-Agent":   config.UserAgent,
 		}).
+		SetQueryParams(map[string]string{
+			"minimum_rating": "5",
+		}).
 		SetDebug(config.Debug).
 		Get(config.PopularUrl)
 
