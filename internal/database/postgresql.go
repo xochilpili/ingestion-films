@@ -54,6 +54,7 @@ func (p *Postgres) InsertFilm(table string, columns []string, item *models.Film)
 			p.logger.Err(err).Msgf("error while validating film %s", item.Title)
 			return err
 		}
+		p.logger.Warn().Msgf("film %s already exists in db", item.Title)
 		return nil
 	}
 

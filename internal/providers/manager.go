@@ -78,7 +78,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				Festivals:            map[string]string{},
 				FestivalsUrl:         "",
 				FestivalsSelectoreRe: "",
-				Debug:                true,
+				Debug:                false,
 				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
 				DelaySecs:            10,
 				RequireTmdb:          false,
@@ -99,7 +99,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				Festivals:            map[string]string{},
 				FestivalsUrl:         "https://letterboxd.com/festiville/lists/",
 				FestivalsSelectoreRe: "h2.title-2 a[href]",
-				Debug:                true,
+				Debug:                false,
 				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
 				DelaySecs:            10,
 				RequireTmdb:          true,
@@ -126,7 +126,7 @@ func New(config *config.Config, logger *zerolog.Logger) *Manager {
 				},
 				FestivalsUrl:         "",
 				FestivalsSelectoreRe: `IMDbReactWidgets\.NomineesWidget\.push\(\[.*?,({.*?})\]\)`,
-				Debug:                true,
+				Debug:                false,
 				UserAgent:            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
 				DelaySecs:            10,
 				RequireTmdb:          true,
@@ -196,6 +196,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
 			return err
 		}
+		m.logger.Info().Msgf("Inserted %s film", item.Title)
 	}
 	m.logger.Info().Msgf("sync completed with %d items", len(films))
 	return nil
