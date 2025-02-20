@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
-	"path"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +25,6 @@ func imdbGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.C
 	c.Limit(&colly.LimitRule{DomainGlob: "", Parallelism: 2, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
 	festivals := config.Festivals
-	imdbFestivalSelectorRe := config.FestivalsSelectoreRe
 
 	/*
 		festivals := map[string]string{
@@ -40,31 +36,23 @@ func imdbGetFestivals(config *ProviderConfig, logger *zerolog.Logger, _ *resty.C
 		}
 	*/
 
-	var model ImdbFestivalRootObject
+	var model ImdbFestivalRoot
 	var films []models.Film
 
 	for k, url := range festivals {
-
-		c.OnHTML("script", func(h *colly.HTMLElement) {
+		
+		c.OnHTML("script[id=__NEXT_DATA__]", func(h *colly.HTMLElement) {
 			scriptContent := h.Text
-			re := regexp.MustCompile(imdbFestivalSelectorRe)
-			matches := re.FindStringSubmatch(scriptContent)
 
 			if config.Debug {
-				fmt.Printf("ScriptContent: %s, matchesLen: %d, matches: %v", scriptContent, len(matches), matches)
-				logger.Info().Msgf("ScriptContent: %s, matchesLen: %d, matches: %v", scriptContent, len(matches), matches)
+				fmt.Printf("%v", scriptContent)
 			}
 
-			if len(matches) > 1 {
-				// Extract the JavaScript object
-				jsObject := matches[1]
-
-				err := json.Unmarshal([]byte(jsObject), &model)
+			err := json.Unmarshal([]byte(scriptContent), &model)
 				if err != nil {
 					log.Fatalf("error while unmarshal %v\n", err)
 				}
-				films = append(films, translate2FestivalModel(&model)...)
-			}
+			films = append(films, translate2FestivalModel(&model)...)
 		})
 
 		if config.Debug {
@@ -92,29 +80,27 @@ func imdbGetPopular(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Cli
 	c.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 1, RandomDelay: time.Duration(config.DelaySecs) * time.Second})
 
 	imdbPopularUrl := config.PopularUrl
-	imdbPopularSelectorRe := config.PopularSelectorRe
 
-	var model ImdbPopularRootObject
+	var model ImdbPopularRoot
 
-	c.OnHTML("script", func(h *colly.HTMLElement) {
+	c.OnHTML("script[id=__NEXT_DATA__]", func(h *colly.HTMLElement) {
 		scriptContent := h.Text
 
-		re := regexp.MustCompile(imdbPopularSelectorRe)
-		matches := re.FindStringSubmatch(scriptContent)
-
 		if config.Debug {
-			logger.Info().Msgf("Captured content: %s, matchesLength: %d, matches: %v", scriptContent, len(matches), matches)
+			fmt.Printf("%s\n", scriptContent)
 		}
 
-		if len(matches) >= 1 {
-			// Extract and print the JavaScript object
-			jsObject := scriptContent
-
-			err := json.Unmarshal([]byte(jsObject), &model)
-			if err != nil {
-				log.Fatalf("error while unmarshal %v\n", err)
-			}
+		err := json.Unmarshal([]byte(scriptContent), &model)
+		if err != nil {
+			log.Fatalf("error while unmarshal %v\n", err)
 		}
+		/* decoder := json.NewDecoder(strings.NewReader(scriptContent))
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&model)
+		if err != nil{
+			panic(fmt.Errorf("error unmarshal %v", err))
+		} */
+
 	})
 
 	if config.Debug {
@@ -138,18 +124,21 @@ func imdbGetPopular(config *ProviderConfig, logger *zerolog.Logger, _ *resty.Cli
 	return translate2PopularModel(&model)
 }
 
-func translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
+/*
+* IMDB changed their schema :(
+*/
+func translate2FestivalModel(imdbObject *ImdbFestivalRoot) []models.Film {
 	var films []models.Film
-	for _, item := range imdbObject.NomineesWidgetModel.EventEditionSummary.Awards {
-		for _, category := range item.Categories {
-			for _, nominations := range category.Nominations {
-				for _, firstNominee := range nominations.PrimaryNominees {
+	for _, award := range(imdbObject.Props.PageProps.Edition.Awards){
+		for _, node := range(award.NominationCategories.Edges){
+			for _, edge := range(node.Node.Nominations.Edges){
+				for _, item := range(edge.Node.AwardedEntities.AwardTitles){
 					films = append(films, models.Film{
 						Provider: "imdb",
-						Id:       firstNominee.Const,
-						Title:    firstNominee.Name,
-						Year:     imdbObject.NomineesWidgetModel.EventEditionSummary.Year,
-						ImageUrl: firstNominee.ImageUrl,
+						Id: item.Title.ID,
+						Title: sanitizeTitle(item.Title.TitleText.Text),
+						Year: 0,
+						ImageUrl: item.Title.PrimaryImage.URL,
 					})
 				}
 			}
@@ -158,29 +147,34 @@ func translate2FestivalModel(imdbObject *ImdbFestivalRootObject) []models.Film {
 	return films
 }
 
-func translate2PopularModel(imdbObject *ImdbPopularRootObject) []models.Film {
+func translate2PopularModel(imdbObject *ImdbPopularRoot) []models.Film {
 	var films []models.Film
-	for _, film := range imdbObject.ItemListElement {
-		var Id string
-		parsedUrl, err := url.Parse(film.Item.Url)
-		if err != nil {
-			Id = ""
-		}
-		Id = path.Base(parsedUrl.Path)
-		genres := strings.Split(film.Item.Genre, ", ")
-		title := strings.ReplaceAll(film.Item.Name, "&amp;", "&")
-		title = strings.ReplaceAll(title, "&apos;", "'")
+	for _, item := range imdbObject.Props.PageProps.PageData.ChartTitles.Edges{
 		films = append(films, models.Film{
-			Provider:    "imdb",
-			Id:          Id,
-			Title:       title,
-			Description: film.Item.Description,
-			ImageUrl:    film.Item.Image,
-			Genre:       genres,
-			Year:        0,
-		})
+			Provider: "imdb",
+			Id: item.Node.ID,
+			Title: sanitizeTitle(item.Node.OriginalTitleText.Text),
+			Description: "",
+			ImageUrl: item.Node.PrimaryImage.URL,
+			Year: item.Node.ReleaseYear.Year,
+			Genre: popularGenres(item.Node.TitleGenres.Genres),
+		})	
 	}
 	return films
+}
+
+func popularGenres(arr []ImdbPopularGenres) []string{
+	genres := make([]string, len(arr))
+	for i, genre := range(arr){
+		genres[i] = genre.Genre.Text
+	}
+	return genres
+}
+
+func sanitizeTitle(title string) string{
+	str := strings.ReplaceAll(title, "&amp;", "&")
+	str = strings.ReplaceAll(str, "&apos;", "'")
+	return str
 }
 
 func imdbPostProcess(config *ProviderConfig, pgService PgService, apiService ApiService, items *[]models.Film) (*[]models.Film, error) {
@@ -190,7 +184,7 @@ func imdbPostProcess(config *ProviderConfig, pgService PgService, apiService Api
 	for i := range *items {
 		item := &(*items)[i]
 		if config.Debug {
-			fmt.Printf("processing item: %s\n", item.Title)
+			fmt.Printf("getting item details: %s\n", item.Title)
 		}
 		filmdetails, err := apiService.GetMovieDetails(item.Title)
 		if err != nil {
@@ -209,7 +203,7 @@ func imdbPostProcess(config *ProviderConfig, pgService PgService, apiService Api
 				if err != nil {
 					continue
 				}
-
+				item.Description = film.Overview
 				item.Year = year
 				item.Genre = genres
 			}
