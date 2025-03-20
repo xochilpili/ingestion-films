@@ -136,7 +136,7 @@ func translate2FestivalModel(imdbObject *ImdbFestivalRoot) []models.Film {
 					films = append(films, models.Film{
 						Provider: "imdb",
 						Id: item.Title.ID,
-						Title: sanitizeTitle(item.Title.TitleText.Text),
+						Title: sanitizeTitle(item.Title.OriginalTitleText.Text),
 						Year: 0,
 						ImageUrl: item.Title.PrimaryImage.URL,
 					})

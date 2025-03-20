@@ -196,7 +196,7 @@ func (m *Manager) SyncFestivals(provider string) error {
 			m.logger.Err(err).Msgf("error while inserting film %s", item.Title)
 			return err
 		}
-		m.logger.Info().Msgf("Inserted %s film", item.Title)
+		//m.logger.Info().Msgf("Inserted %s film", item.Title)
 	}
 	m.logger.Info().Msgf("sync completed with %d items", len(films))
 	return nil
@@ -246,6 +246,9 @@ func (m *Manager) getFestivals(provider string) []models.Film {
 	filmsChan := make(chan []models.Film)
 
 	for p := range m.handlers {
+		if !m.handlers[p].Config.Enabled{
+			continue;
+		}
 		if provider != "" && provider != p || p == "yts" {
 			continue
 		}
